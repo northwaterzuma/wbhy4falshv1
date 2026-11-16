@@ -84,7 +84,7 @@
       "tests": [
         "TEST-02A"
       ],
-      "status": "done",
+      "status": "in_progress",
       "artifacts": [
         "tests/fixtures/manifest.json",
         "tests/fixtures/media/",
@@ -112,7 +112,7 @@
       "tests": [
         "TEST-02B"
       ],
-      "status": "done",
+      "status": "in_progress",
       "artifacts": [
         "crates/engine/",
         "evidence/P1-T01/",
@@ -143,7 +143,7 @@
         "TEST-03B",
         "TEST-12B"
       ],
-      "status": "done",
+      "status": "in_progress",
       "artifacts": [
         "crates/app/src/task_coordinator.rs 或等价模块",
         "crates/ipc/src/task_api.rs 或等价类型",
@@ -263,7 +263,7 @@
         "TEST-09B",
         "TEST-09C"
       ],
-      "status": "done",
+      "status": "in_progress",
       "artifacts": [
         "docs/NETWORK_CONTEXT.md",
         "crates/tools/src/media_policy.rs 或等价模块",
@@ -388,7 +388,7 @@
         "TEST-06F",
         "TEST-07D"
       ],
-      "status": "done",
+      "status": "in_progress",
       "artifacts": [
         "docs/FLUX_EVALUATION.md",
         "crates/tools/ 可选适配器",

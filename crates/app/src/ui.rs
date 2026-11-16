@@ -1,6 +1,6 @@
 //! IDM Classic Light UI View-Model and egui/eframe Window Bindings (UI-01 .. UI-12).
 
-use crate::runner::{StartRequest, WorkerEvent, WorkerHandle, spawn_worker};
+use crate::runner::{AttemptControl, StartRequest, WorkerEvent, WorkerHandle, spawn_worker};
 use crate::task_coordinator::TaskCoordinator;
 use mdm_ipc::{
     CallerOriginKind, CallerScope, CapabilityScope, CollisionPolicy, ControlOp, DirectoryPolicy,
@@ -8,9 +8,12 @@ use mdm_ipc::{
     TaskSnapshot, TaskState, sanitize_file_name,
 };
 use mdm_tools::video::extract_youtube_identity;
+use std::collections::HashMap;
 use std::sync::mpsc::Receiver;
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
+
+const DEFAULT_NETWORK_PROFILE_ID: &str = "default";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IdmWindowId {
@@ -48,6 +51,7 @@ pub enum AppAction {
     StopQueue,
     ResumeSelected,
     StopSelected,
+    CancelSelected,
     RemoveSelected,
     DeleteSelectedFiles,
     OpenOptions,
@@ -142,6 +146,7 @@ pub struct RustCatchDesktopApp {
     pub worker: WorkerHandle,
     pub worker_events: Receiver<WorkerEvent>,
     pub log_lines: Vec<LogLine>,
+    active_attempts: HashMap<String, (String, AttemptControl)>,
 }
 
 impl Default for RustCatchDesktopApp {
@@ -170,6 +175,15 @@ impl Default for RustCatchDesktopApp {
             worker,
             worker_events,
             log_lines: Vec::new(),
+            active_attempts: HashMap::new(),
+        }
+    }
+}
+
+impl Drop for RustCatchDesktopApp {
+    fn drop(&mut self) {
+        for (_, control) in self.active_attempts.values() {
+            control.request_stop();
         }
     }
 }
@@ -296,14 +310,35 @@ impl RustCatchDesktopApp {
             );
             return false;
         }
-        self.worker.start(StartRequest {
+        if task.network_profile_id != DEFAULT_NETWORK_PROFILE_ID || task.context_ref.is_some() {
+            let error = mdm_ipc::ErrorDetail {
+                code: mdm_ipc::ErrorCode::ToolUnavailable,
+                message: "当前下载执行器无法应用此任务的网络配置或授权上下文".into(),
+                retryable: false,
+                retry_after_ms: None,
+            };
+            self.record_worker_event(WorkerEvent::Failed { task_id: task_id.into(), attempt_id, error });
+            return false;
+        }
+        let request = StartRequest {
             task_id: task.task_id.clone(),
-            attempt_id,
+            attempt_id: attempt_id.clone(),
             page_url: task.worker_source_url.clone(),
             file_name_hint: task.output.file_name_hint.clone(),
             output_dir: task.output.directory_ref.clone(),
             media_intent: task.media_intent.clone(),
-        });
+        };
+        let Some(control) = self.worker.start(request) else {
+            let error = mdm_ipc::ErrorDetail {
+                code: mdm_ipc::ErrorCode::InternalError,
+                message: "后台下载服务不可用".into(),
+                retryable: false,
+                retry_after_ms: None,
+            };
+            self.record_worker_event(WorkerEvent::Failed { task_id: task_id.into(), attempt_id, error });
+            return false;
+        };
+        self.active_attempts.insert(task_id.into(), (attempt_id, control));
         self.push_log(LogLevel::Info, task_id, "已提交下载任务到后台 worker");
         true
     }
@@ -332,15 +367,19 @@ impl RustCatchDesktopApp {
                 attempt_id,
                 bytes,
             } => {
-                let _ = self
+                if self
                     .coordinator
-                    .apply_worker_event(&task_id, &attempt_id, bytes, false);
-                self.push_log(LogLevel::Progress, &task_id, format!("已接收 {} B", bytes));
+                    .apply_worker_event(&task_id, &attempt_id, bytes, false)
+                    .is_ok()
+                {
+                    self.push_log(LogLevel::Progress, &task_id, format!("已接收 {} B", bytes));
+                }
             }
             WorkerEvent::Completed {
                 task_id,
                 attempt_id,
             } => {
+                self.clear_attempt(&task_id, &attempt_id);
                 let bytes = self
                     .coordinator
                     .tasks
@@ -364,19 +403,26 @@ impl RustCatchDesktopApp {
                 attempt_id,
                 error,
             } => {
-                let message = format!("{:?}: {}", error.code, error.message);
-                if let Err(reject) =
-                    self.coordinator
-                        .mark_task_failed(&task_id, &attempt_id, &error, now_epoch_ms())
+                self.clear_attempt(&task_id, &attempt_id);
+                if self.coordinator
+                    .mark_task_failed(&task_id, &attempt_id, &error, now_epoch_ms())
+                    .is_ok()
                 {
-                    self.push_log(
-                        LogLevel::Error,
-                        &task_id,
-                        format!("失败事件被拒绝: {}", reject.message),
-                    );
+                    self.push_log(LogLevel::Error, &task_id, format!("{:?}: {}", error.code, error.message));
                 }
-                self.push_log(LogLevel::Error, &task_id, message);
             }
+            WorkerEvent::Stopped { task_id, attempt_id } => {
+                self.clear_attempt(&task_id, &attempt_id);
+                if self.coordinator.finish_stopping(&task_id, &attempt_id) {
+                    self.push_log(LogLevel::Info, &task_id, "后台下载已停止");
+                }
+            }
+        }
+    }
+
+    fn clear_attempt(&mut self, task_id: &str, attempt_id: &str) {
+        if self.active_attempts.get(task_id).is_some_and(|(id, _)| id == attempt_id) {
+            self.active_attempts.remove(task_id);
         }
     }
 
@@ -410,7 +456,7 @@ impl RustCatchDesktopApp {
         let parsed = match url::Url::parse(trimmed) {
             Ok(parsed) => parsed,
             Err(_) => {
-                self.dialog_error = Some(format!("地址格式无效: {}", trimmed));
+                self.dialog_error = Some("地址格式无效".to_string());
                 return false;
             }
         };
@@ -457,7 +503,7 @@ impl RustCatchDesktopApp {
         self.pending_media_id = identity.map(|(_, media_id)| media_id);
         self.pending_start_now = true;
         self.open_dialog = Some(UiDialog::DownloadInfo);
-        self.status_message = format!("地址已解析，等待确认: {}", trimmed);
+        self.status_message = "地址已解析，等待确认".to_string();
         true
     }
 
@@ -522,7 +568,7 @@ impl RustCatchDesktopApp {
             &source,
             output,
             None,
-            "default".to_string(),
+            DEFAULT_NETWORK_PROFILE_ID.to_string(),
             media_intent,
         );
         if let Some(err) = response.error {
@@ -621,31 +667,17 @@ impl RustCatchDesktopApp {
             self.handle_delete_key(false, now_epoch_ms());
             return;
         }
-        let caller = Self::ui_caller();
-        let now = now_epoch_ms();
         let ids = self.selected_task_ids.clone();
         let mut changed = 0usize;
         for id in ids {
-            let Some(rev) = self.coordinator.tasks.get(&id).map(|task| task.revision) else {
-                continue;
-            };
-            let request_id = format!("ui-{}-{}", label, Uuid::new_v4());
-            let response = self
-                .coordinator
-                .control_task(&caller, &request_id, &id, rev, op, now);
-            if response.status != ResponseStatus::Error {
+            if self.control_download(&id, op) {
                 changed += 1;
-                if op == ControlOp::Resume {
-                    self.start_task_worker(&id);
-                }
             }
         }
         self.status_message = format!("{}: {} 个任务状态已更新", label, changed);
     }
 
     pub fn set_queue_running(&mut self, running: bool) {
-        let caller = Self::ui_caller();
-        let now = now_epoch_ms();
         let ids: Vec<String> = self
             .coordinator
             .tasks
@@ -669,18 +701,8 @@ impl RustCatchDesktopApp {
         };
         let mut changed = 0usize;
         for id in ids {
-            let Some(rev) = self.coordinator.tasks.get(&id).map(|task| task.revision) else {
-                continue;
-            };
-            let request_id = format!("ui-queue-{}-{}", running, Uuid::new_v4());
-            let response = self
-                .coordinator
-                .control_task(&caller, &request_id, &id, rev, op, now);
-            if response.status != ResponseStatus::Error {
+            if self.control_download(&id, op) {
                 changed += 1;
-                if running {
-                    self.start_task_worker(&id);
-                }
             }
         }
         self.queue_running = running;
@@ -693,6 +715,30 @@ impl RustCatchDesktopApp {
             },
             changed
         );
+    }
+
+    fn control_download(&mut self, task_id: &str, op: ControlOp) -> bool {
+        let Some(task) = self.coordinator.tasks.get(task_id) else {
+            return false;
+        };
+        if matches!(op, ControlOp::Pause | ControlOp::Cancel)
+            && let Some((attempt_id, control)) = self.active_attempts.get(task_id)
+            && task.attempt_id.as_ref() == Some(attempt_id)
+            && !control.request_stop()
+        {
+            return false;
+        }
+        let response = self.coordinator.control_task(
+            &Self::ui_caller(), &format!("ui-{}", Uuid::new_v4()),
+            task_id, task.revision, op, now_epoch_ms(),
+        );
+        if response.status == ResponseStatus::Error {
+            return false;
+        }
+        if op == ControlOp::Resume {
+            self.start_task_worker(task_id);
+        }
+        true
     }
 
     /// Keyboard Delete triggers `RemoveRecord` only (never `DeleteFiles` unless explicitly confirmed with Shift+Delete).
@@ -761,6 +807,7 @@ impl RustCatchDesktopApp {
             AppAction::StopQueue => self.set_queue_running(false),
             AppAction::ResumeSelected => self.control_selected(ControlOp::Resume, "恢复"),
             AppAction::StopSelected => self.control_selected(ControlOp::Pause, "停止"),
+            AppAction::CancelSelected => self.control_selected(ControlOp::Cancel, "取消下载"),
             AppAction::RemoveSelected => self.control_selected(ControlOp::RemoveRecord, "移除记录"),
             AppAction::DeleteSelectedFiles => {
                 self.status_message = "删除文件需要显式二次确认；此入口不直接删除文件".to_string();

@@ -1,6 +1,6 @@
 document.addEventListener("DOMContentLoaded", () => {
   const statusEl = document.getElementById("bridge-status");
   if (statusEl) {
-    statusEl.textContent = "Native Host: com.rustcatch.bridge (协议 V1 已就绪)";
+    statusEl.textContent = "此版本尚未启用浏览器下载接管，请使用浏览器内置下载。";
   }
 });

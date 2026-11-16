@@ -1804,6 +1804,7 @@ dependencies = [
  "egui",
  "hex",
  "hmac",
+ "libc",
  "mdm-engine",
  "mdm-ipc",
  "mdm-tools",
@@ -1814,6 +1815,7 @@ dependencies = [
  "tokio",
  "url",
  "uuid",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

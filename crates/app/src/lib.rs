@@ -9,6 +9,7 @@ pub mod runner;
 pub mod scheduler;
 pub mod sync;
 pub mod task_coordinator;
+mod tool_process;
 pub mod ui;
 
 pub use app::*;

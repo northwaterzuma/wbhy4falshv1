@@ -1,6 +1,12 @@
-# P4-T03 Windows 首发集成门槛评审报告 (LAUNCH_REVIEW)
+# Windows 首发验收状态
 
-- **首发范围 (REQ-01..REQ-12)**：所有 Rust 核心模块、V1 协议 Schema、MV3 单扩展、MCP 与 CLI 已在同一代码基线完成集成。
-- **离线确定性套件结果**：`TEST-02A`, `TEST-02B`, `TEST-03A`, `TEST-03B`, `TEST-04A`, `TEST-04B`, `TEST-05A`, `TEST-05B`, `TEST-06E`, `TEST-06F`, `TEST-07B`, `TEST-07C`, `TEST-07D`, `TEST-08A`, `TEST-08B`, `TEST-09A`, `TEST-09B`, `TEST-09C`, `TEST-10A`, `TEST-10B`, `TEST-11C`, `TEST-12A`, `TEST-12B` 全部在本地沙箱实测通过并生成 `evidence/` 报告。
-- **真机与在线门槛状态**：Windows 10/11 GUI 实机 (`TEST-01A/B/C`, `TEST-11B`)、Edge/Chrome 浏览器进程 (`TEST-04C`, `TEST-05C`)、授权在线 YouTube 样本 (`TEST-06A..D`, `TEST-07A`) 及 `cargo` 编译 (`TEST-11A`) 已配置于 `.github/workflows/ci.yml`，状态如实保持 `needs_env`。
-- **持续推进**：首发模块就绪后未停止，已继续完成 P5 (`P5-T01..P5-T04`) 完整 IDM 功能对齐。
+首发验收须完成 REQ-01～12 对应的 `ACCEPTANCE.md` 用例。当前媒体执行器已有暂存、进程停止、音视频轨校验、同名文件保护和日志处理。以下条件仍待验证或实施。
+
+| 范围 | 当前缺口 |
+|---|---|
+| TEST-02 / TEST-03 | 普通 HTTP 引擎尚未接入桌面流程。跨重启任务存储、源验证器、续传及崩溃恢复待实现和联调。 |
+| TEST-04 / TEST-05 | Native Host 当前拒绝接管请求。须接入持久化任务服务后，在干净的 Win10/11 Chrome 与 Edge 上验证接管、回退和扩展休眠。 |
+| TEST-06 / TEST-07 | 实际的 yt-dlp / FFmpeg 成品、授权 YouTube 样本、格式选择及字幕仍须逐项验收。 |
+| TEST-08 至 TEST-12 | 调度及代理的产品集成、安装与迁移、共享 CLI/MCP 服务、固定上游基线与发行组件验证仍待完成。 |
+
+CI 执行夹具完整性、Rust 编译与测试。真实 Windows 界面、浏览器和授权在线媒体依照验收文档单独执行。当前发布包定位为未签名预览。

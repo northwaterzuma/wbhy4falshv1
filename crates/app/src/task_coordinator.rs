@@ -631,8 +631,8 @@ impl TaskCoordinator {
         };
 
         // Repeat control idempotency BEFORE revision guard
-        if (op == ControlOp::Pause && task.state == TaskState::Paused)
-            || (op == ControlOp::Cancel && task.state == TaskState::Cancelled)
+        if (op == ControlOp::Pause && matches!(task.state, TaskState::Pausing | TaskState::Paused))
+            || (op == ControlOp::Cancel && matches!(task.state, TaskState::Cancelling | TaskState::Cancelled))
         {
             return BrowserBridgeResponse {
                 version: PROTOCOL_VERSION_V1,
@@ -673,23 +673,32 @@ impl TaskCoordinator {
             );
         }
 
+        let active = matches!(task.state, TaskState::Resolving | TaskState::Running | TaskState::Finishing);
+        let stopping = matches!(task.state, TaskState::Pausing | TaskState::Cancelling);
         match op {
             ControlOp::Pause => {
-                if task.state.is_terminal() {
-                    return BrowserBridgeResponse::error(request_id, ErrorCode::InvalidState, "Cannot pause terminal task", false, None);
+                if task.state.is_terminal() || stopping || task.state == TaskState::HandoffPending {
+                    return BrowserBridgeResponse::error(request_id, ErrorCode::InvalidState, "Cannot pause this task state", false, None);
                 }
-                task.state = TaskState::Paused;
+                task.state = if active && task.attempt_id.is_some() {
+                    TaskState::Pausing
+                } else {
+                    TaskState::Paused
+                };
                 task.revision += 1;
             }
             ControlOp::Resume | ControlOp::Retry => {
-                if task.state == TaskState::Completed {
-                    return BrowserBridgeResponse::error(request_id, ErrorCode::InvalidState, "Task already completed", false, None);
+                if !matches!(task.state, TaskState::Queued | TaskState::Paused | TaskState::Failed) {
+                    return BrowserBridgeResponse::error(request_id, ErrorCode::InvalidState, "Task is not ready to start", false, None);
                 }
                 let attempt = format!("att-{}", self.next_attempt_counter);
                 self.next_attempt_counter += 1;
                 task.attempt_id = Some(attempt);
                 task.state = TaskState::Running;
                 task.phase = Some(TaskPhase::Transfer);
+                task.bytes_received = 0;
+                task.error_code = None;
+                task.reason = None;
                 task.revision += 1;
             }
             ControlOp::Cancel => {
@@ -703,12 +712,19 @@ impl TaskCoordinator {
                         self.tombstones.insert(idem_tuple, now_epoch_ms);
                     }
                 }
-                task.state = TaskState::Cancelled;
-                task.phase = None;
-                task.attempt_id = None;
+                if (active || stopping) && task.attempt_id.is_some() {
+                    task.state = TaskState::Cancelling;
+                } else {
+                    task.state = TaskState::Cancelled;
+                    task.phase = None;
+                    task.attempt_id = None;
+                }
                 task.revision += 1;
             }
             ControlOp::RemoveRecord => {
+                if active || stopping {
+                    return BrowserBridgeResponse::error(request_id, ErrorCode::InvalidState, "Stop the task before removing it", false, None);
+                }
                 let idem_tuple = (task.caller_key.clone(), task.idempotency_key.clone());
                 if let Some(h) = self.handoffs_by_idem.get_mut(&idem_tuple) {
                     if h.state != HandoffState::Committed {
@@ -732,6 +748,9 @@ impl TaskCoordinator {
                 };
             }
             ControlOp::DeleteFiles => {
+                if active || stopping {
+                    return BrowserBridgeResponse::error(request_id, ErrorCode::InvalidState, "Stop the task before deleting files", false, None);
+                }
                 for p in &task.owned_artifact_paths {
                     if !p.contains("..") {
                         let _ = std::fs::remove_file(p);
@@ -776,10 +795,10 @@ impl TaskCoordinator {
                 retry_after_ms: None,
             });
         };
-        if task.state == TaskState::Completed {
+        if !matches!(task.state, TaskState::Resolving | TaskState::Running | TaskState::Finishing) {
             return Err(ErrorDetail {
                 code: ErrorCode::InvalidState,
-                message: "Completed task cannot be modified by late worker events".to_string(),
+                message: "Task is not accepting progress or completion events".to_string(),
                 retryable: false,
                 retry_after_ms: None,
             });
@@ -804,6 +823,24 @@ impl TaskCoordinator {
         Ok((task.revision, task.last_seq))
     }
 
+    pub(crate) fn finish_stopping(&mut self, task_id: &str, attempt_id: &str) -> bool {
+        let Some(task) = self.tasks.get_mut(task_id) else {
+            return false;
+        };
+        if task.attempt_id.as_deref() != Some(attempt_id) {
+            return false;
+        }
+        task.state = match task.state {
+            TaskState::Pausing => TaskState::Paused,
+            TaskState::Cancelling => TaskState::Cancelled,
+            _ => return false,
+        };
+        task.attempt_id = None;
+        task.phase = None;
+        task.revision += 1;
+        true
+    }
+
     /// Marks the active attempt as failed after the worker reports a terminal error.
     /// Stale attempts and terminal tasks are ignored so late events cannot corrupt state.
     pub fn mark_task_failed(
@@ -821,10 +858,10 @@ impl TaskCoordinator {
                 retry_after_ms: None,
             });
         };
-        if task.state.is_terminal() {
+        if !matches!(task.state, TaskState::Resolving | TaskState::Running | TaskState::Finishing) {
             return Err(ErrorDetail {
                 code: ErrorCode::InvalidState,
-                message: "Terminal task cannot be marked failed".to_string(),
+                message: "Task is not accepting failure events".to_string(),
                 retryable: false,
                 retry_after_ms: None,
             });

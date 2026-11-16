@@ -46,6 +46,9 @@ impl eframe::App for RustCatchDesktopApp {
                     if ui.button("停止 (Stop)").clicked() {
                         action = Some(AppAction::StopSelected);
                     }
+                    if ui.button("取消下载").clicked() {
+                        action = Some(AppAction::CancelSelected);
+                    }
                     ui.separator();
                     if ui.button("计划任务 / 队列").clicked() {
                         action = Some(AppAction::OpenScheduler);
@@ -312,6 +315,8 @@ impl eframe::App for RustCatchDesktopApp {
                 mdm_ipc::TaskState::Running
                     | mdm_ipc::TaskState::Resolving
                     | mdm_ipc::TaskState::Finishing
+                    | mdm_ipc::TaskState::Pausing
+                    | mdm_ipc::TaskState::Cancelling
             )
         });
         if any_running {

@@ -38,6 +38,12 @@ pub fn build_ytdlp_command(
         "--no-Playlist".to_ascii_lowercase(),
         "--newline".to_string(),
         "--no-exec".to_string(),
+        "--no-simulate".to_string(),
+        "--print".to_string(),
+        "after_move:rustcatch-output:%(filepath)j".to_string(),
+        "--progress".to_string(),
+        "--progress-template".to_string(),
+        "download:rustcatch-bytes:%(progress.downloaded_bytes)s".to_string(),
         "--keep-video".to_string(), // Preserve merge inputs until Rust verifies final output
         "--concurrent-fragments".to_string(),
         fragment_concurrency.clamp(1, 8).to_string(),

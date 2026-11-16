@@ -1,5 +1,17 @@
 # RustCatch 开发交接
 
+## 当前修复分支（2026-11-17）
+
+- 分支 `codex/rustcatch-repair`，基于用户指定 WorkBuddy 仓库的 `cd02a9d`。在独立本地副本中实施，原开发分支保留。
+- 桌面媒体任务在自己的目录暂存，按 yt-dlp 报告校验成品及必要音视频轨后提交，同名文件保留。暂停和取消等待工作进程结束。普通日志使用阶段和错误分类，未接入的网络与授权配置明确报错。
+- Native Host 在持久化任务服务可用前拒绝接管，CLI/MCP 的未接入命令返回不可用。测试脚本只检查实际读取的资料与夹具。根目录规格、任务状态、首发与全量对齐评审已按当前证据修订。
+- Windows GNU 的 Rust 1.95.0 执行 `cargo test --workspace --offline --locked`，74 项通过。覆盖本地父子进程停止、停止与提交互斥、同名文件、无效成品、迟到事件、宿主拒绝接管。CLI 的合成添加请求返回退出码 3。14 份 JSON、3 个二进制夹具、6 个媒体清单路径及 4 个扩展脚本语法检查通过。
+- GitHub 三平台 CI 与真实媒体组件联调待运行。按用户安排，由用户把此分支推到 `northwaterzuma/wbhy4falshv1` 的新 `rustcatch/*` 分支触发 CI。后续首要任务是接入原生 HTTP 和持久化任务恢复，然后联调浏览器接管、CLI/MCP 以及代理配置。
+
+## 历史交接与发布记录
+
+下方历史 CI 仅适用于当时的提交。以模拟结果写入的历史验收条目以 [项目交付评审](docs/PROJECT_COMPLETION_REVIEW.md) 的证据边界为准。
+
 ```yaml
 project: RustCatch
 spec_version: "1.0"
