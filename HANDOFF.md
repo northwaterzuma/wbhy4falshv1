@@ -7,7 +7,8 @@
 - [x] Chromium 扩展接入真实 Native Host 与桌面任务账本。严格匹配用户授权公开 GET，先保存 prepare，再核实浏览器取消，最后持久化 commit。失去反馈时，以原任务重试或在桌面明确核对。
 - [x] Windows GNU / Rust 1.95.0 的 `cargo test --workspace --offline --locked` 为 81 项通过、0 失败。`cargo build --workspace --offline --locked` 通过。受控本机服务覆盖断流、进程退出后续传、短 206、源变更、200 重写、同名保护。真实回环传输覆盖持久化失败不回 ACK、重建桌面后继续核对、commit 幂等。
 - [x] `node --test tests/browser_handoff.test.mjs` 两项通过，扩展脚本语法和 Python 夹具检查通过。用构建出的 CLI 与 Native Host 在临时数据目录验证清单生成、二进制帧握手、来源拒绝及桌面离线回退。
-- [ ] 本轮源码待 GitHub 三平台构建、真实 Chrome/Edge 安装接管和窗口测试。注册说明见 [浏览器下载接管](docs/EXTENSION_INSTALL.md)。多连接调度、带身份的接管、实际掉电恢复及媒体跨重启仍按原规格验收。
+- [x] 本轮源码已提交到交付仓库并通过 GitHub Actions 三平台验证：分支 `rustcatch/http-resume-handoff-20261117`，提交 `d8211db`，CI run `44213586615`，4/4 jobs 全部成功。Windows / Ubuntu / macOS 的 Rust 单元测试与集成测试各为 81 项通过、0 失败；规格与夹具完整性 job 通过，其中包含浏览器接管的无浏览器顺序测试。CI 链接：https://github.com/northwaterzuma/wbhy4falshv1/actions/runs/44213586615
+- [ ] 真实 Chrome/Edge 安装接管和桌面窗口测试仍为 needs_env。注册说明见 [浏览器下载接管](docs/EXTENSION_INSTALL.md)。多连接调度、带身份的接管、实际掉电恢复及媒体跨重启仍按原规格验收。
 
 ## 上一轮修复分支（2026-11-17）
 
