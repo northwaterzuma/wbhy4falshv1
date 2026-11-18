@@ -1,27 +1,25 @@
-# RustCatch 需求与 IDM 功能对齐差距矩阵 (FEATURE_MATRIX)
+# RustCatch 需求与 IDM 功能差距矩阵
 
-版本：1.0 | 更新时间：2026-11-16 UTC | 基线提交：`605a0c74e50361afe77bf1721d7172636bd5c57e`
+以下状态反映产品入口与实测证据。验收步骤见 [ACCEPTANCE.md](../ACCEPTANCE.md)。历史单测、模拟与构建证据见 [项目交付评审](PROJECT_COMPLETION_REVIEW.md)。
 
-> **诚实性声明**：本表严格区分“源码与契约已实现”、“离线确定性验证通过 (offline passed)”与“等待目标真机/浏览器/在线样本环境 (needs_env)”。任何未在对应真机或外部环境中实际运行的测试均保持 `needs_env`，绝不伪造为全部通过。
-
-| 需求编号 | 范围 (Scope) | 功能与交付边界 | 核心实现模块 | 离线验证状态 | 真机/在线验证状态 | 关联测试套件 | 证据路径与环境说明 |
-|---|---|---|---|---|---|---|---|
-| REQ-01 | launch | IDM 风格 12 类窗口(UI-01～12)、中文、快捷键、高 DPI 视图模型与 egui 绑定 | `crates/app/src/ui.rs` | 已验证视图模型与动作状态机 | `needs_env` (需 Windows 10/11 GUI 实机截图对比) | TEST-01A/B/C | `docs/baseline/idm/manifest.json`, `evidence/P0/TEST-01A/` |
-| REQ-02 | launch | HTTP/HTTPS、Range(206/200/416)、强/弱验证器、动态分段、限速、SHA-256 校验 | `crates/engine/src/{download,planner,http_validator}.rs` | `passed` (离线协议矩阵验证通过) | `needs_env` (TEST-02C 与实机 IDM 性能对照需 Windows VM) | TEST-02A/B/C | `evidence/P1-T01/TEST-02B/` |
-| REQ-03 | launch | 原子检查点持久化、崩溃窗口恢复、过期地址重解析、源变化拒绝拼接 | `crates/engine/src/checkpoint.rs`, `crates/app/src/task_coordinator.rs` | `passed` (离线崩溃窗口与旧事件隔离通过) | `needs_env` (跨物理卷/OS 文件锁需 Windows VM) | TEST-03A/B | `evidence/P1-T02/TEST-03A/`, `evidence/P1-T02/TEST-03B/` |
-| REQ-04 | launch | Edge/Chrome MV3 扩展、Native Messaging 4 阶段握手、两阶段接管(prepare/commit/abort)与幂等 | `crates/nmhost/`, `crates/ipc/`, `extension/` | `passed` (离线帧边界、HMAC 握手、交接故障状态机通过) | `needs_env` (真实 Edge/Chrome 进程接管需 `browser_vm`) | TEST-04A/B/C | `evidence/P2-T01/TEST-04A/`, `evidence/P2-T01/TEST-04B/` |
-| REQ-05 | launch | 猫抓 API 桥接与正式单扩展嗅探、HLS/DASH 解析、AES-128 vs DRM 识别、`nav_epoch` 隔离 | `crates/app/src/capture.rs`, `crates/tools/src/streams.rs`, `extension/` | `passed` (离线 SPA 代次隔离、HLS/DASH/DRM 矩阵通过) | `needs_env` (干净浏览器单扩展安装验收需 `browser_vm`) | TEST-05A/B/C | `evidence/P2-T02/TEST-05A/`, `evidence/P2-T02/TEST-05B/` |
-| REQ-06 | launch | YouTube 受控管线(yt-dlp+EJS+Deno+FFmpeg)、12 类错误分类、组件版本锁定与回滚 | `crates/tools/src/{video,ytdlp_errors,components}.rs` | `passed` (离线组件校验、错误分类与恢复状态机通过) | `needs_env` (公开 1080p/4K/登录/代理在线样本需 `authorized_online`) | TEST-06A～F | `evidence/P3-T01/TEST-06E/`, `evidence/P3-T01/TEST-06F/` |
-| REQ-07 | launch | 画质/编码/HDR 意图、原声/配音音轨、人工/自动字幕、Shorts 与分页播放列表去重 | `crates/tools/src/media_policy.rs` | `passed` (离线选择器、字幕兼容与列表分页去重通过) | `needs_env` (真实 Shorts/多音轨在线下载需 `authorized_online`) | TEST-07A～D | `evidence/P3-T02/TEST-07B/`, `evidence/P3-T02/TEST-07D/` |
-| REQ-08 | launch | 分类、多队列、DST/睡眠感知计划(`occurrence_id`)、全局/站点并发预算与统一限速转发 | `crates/app/src/{queue,scheduler}.rs`, `crates/tools/src/relay.rs` | `passed` (虚拟时钟调度与全局令牌桶限速通过) | `needs_env` (OS 真实睡眠唤醒需 `os_vm`) | TEST-08A/B | `evidence/P4-T01/TEST-08A/`, `evidence/P4-T01/TEST-08B/` |
-| REQ-09 | launch | 系统/手动代理(HTTP/SOCKS5)、禁止静默直连、跨域重定向剥离认证、Context TTL/续期/撤销 | `crates/engine/src/auth.rs`, `crates/ipc/src/task_api.rs` | `passed` (离线代理路由、重定向脱敏与秘密隔离通过) | `needs_env` (真实系统代理与浏览器分区 Cookie 需 `browser_vm`) | TEST-09A/B/C | `evidence/P2-T03/TEST-09A/`, `evidence/P2-T03/TEST-09B/` |
-| REQ-10 | launch | 批量 URL/通配符、剪贴板监听、拖放、任务导入导出(脱敏)与幂等去重 | `crates/app/src/batch.rs` | `passed` (离线批量规则与导入导出脱敏通过) | `needs_env` (OS 剪贴板/拖放窗口事件需 `os_vm`) | TEST-10A/B | `evidence/P4-T01/TEST-10A/`, `evidence/P4-T01/TEST-10B/` |
-| REQ-11 | launch | RustCatch 独立身份、Windows 安装/便携注册、组件与 schema 升级回滚、GitHub Actions CI | `.github/workflows/`, `crates/cli/`, `crates/tools/src/components.rs` | `passed` (离线更新校验、schema 降级拒写与回滚通过) | `needs_env` (本地无 rustc，交由 GitHub Actions 编译；Windows 安装器需 `os_vm`) | TEST-11A/B/C | `evidence/P0/TEST-11A/`, `evidence/P4-T02/TEST-11C/` |
-| REQ-12 | launch | MCP stdio 9 类结构化工具、服务端能力作用域校验、禁止默认删文件/执行命令、u64 字符串无损 | `crates/mcp/src/lib.rs`, `crates/ipc/src/task_api.rs` | `passed` (离线越权拦截、路径逃逸防护与 DTO 往返通过) | `passed` (纯协议与本地边界已完整验证) | TEST-12A/B | `evidence/P4-T02/TEST-12A/`, `evidence/P1-T02/TEST-12B/` |
-| REQ-13 | full_parity | FTP/FTPS 主动/被动模式、REST 断点续传、SIZE/MDTM 校验、显式/隐式 TLS 与会话预算 | `crates/engine/src/ftp.rs` | `passed` (离线 FTP 状态机与 REST 恢复协议测试通过) | `needs_env` (受控企业 FTPS/代理服务器需 `controlled_domain`) | TEST-13A/B | `evidence/P5-T01/TEST-13A/` |
-| REQ-14 | full_parity | Negotiate / NTLM / Kerberos 高级服务器与代理认证隔离适配层、跨站重定向不泄漏令牌 | `crates/engine/src/auth.rs` | `passed` (离线认证挑战状态机与跨域剥离测试通过) | `needs_env` (Windows AD 域控 SSO 实测需 `controlled_domain`) | TEST-14A | `evidence/P5-T01/TEST-14A/` |
-| REQ-15 | full_parity | 站点抓取四步向导、同站/深度<=2/页数<=500/字节上限、项目恢复、离线相对链接改写、防 SSRF | `crates/app/src/grabber.rs` | `passed` (离线多层站点抓取、循环链接、外域拦截与相对路径重写通过) | `needs_env` (向导 GUI 交互需 `os_vm`) | TEST-15A | `evidence/P5-T02/TEST-15A/` |
-| REQ-16 | full_parity | 周期同步队列、ETag/Last-Modified 远端变化对比、暂存校验后替换、本地修改冲突备份 | `crates/app/src/sync.rs` | `passed` (离线虚拟时钟同步、冲突备份与断电恢复通过) | `passed` (离线受控服务闭环通过) | TEST-16A | `evidence/P5-T02/TEST-16A/` |
-| REQ-17 | full_parity | HTTP Range 远程 ZIP/ZIP64 EOCD 与中央目录预览、限制条目数/目录大小、防路径穿越与解压炸弹 | `crates/engine/src/zip_preview.rs` | `passed` (离线 ZIP/ZIP64 Range 预览、加密/分卷拒绝与越界拦截通过) | `needs_env` (预览对话框 GUI 需 `os_vm`) | TEST-17A | `evidence/P5-T03/TEST-17A/` |
-| REQ-18 | full_parity | IDM 剩余基线能力：完成后通知/打开目录/外部杀毒扫描(argv)/可撤销关机倒计时；旧 MMS/拨号登记差距 | `crates/app/src/scheduler.rs`, `docs/FULL_PARITY_REVIEW.md` | `passed` (完成后动作状态机与关机倒计时撤销通过；MMS/拨号明确标为 legacy 不支持) | `needs_env` (OS 关机/通知 API 需 `os_vm`) | TEST-18A | `evidence/P5-T03/TEST-18A/` |
-| REQ-19 | cross_platform | Windows / macOS / Linux 跨平台目录、Native Host 注册清单、平台凭据库适配与 GitHub Actions 矩阵构建 | `.github/workflows/ci.yml`, `crates/cli/src/lib.rs` | `passed` (跨平台清单生成与条件编译代码就绪) | `needs_env` (macOS/Linux 真机桌面与浏览器联调需 `os_vm`) | TEST-19A | `evidence/P5-T04/TEST-19A/` |
+| 需求 | 现有能力及待验证范围 | 验收 |
+|---|---|---|
+| REQ-01 | 桌面界面和部分操作已接入。12 类窗口和 Win10/11 实机行为待核对。 | TEST-01 |
+| REQ-02 | 原生 HTTP/HTTPS 单流和 Range 续传已接入。本地断流、短 206、Range 被忽略、版本变化有传输测试。多连接调度与性能待实测。 | TEST-02 |
+| REQ-03 | 普通下载与交接账本可持久化。HTTP 文件可重启读取同步检查点与成品摘要。真实进程故障、电源中断及任意媒体恢复仍待验收。 | TEST-03 |
+| REQ-04 | 已接入 Native Host、用户授权公开 GET、两阶段持久化与原标识重试。实际 Chrome/Edge 两侧联调仍待完成。 | TEST-04 |
+| REQ-05 | 资源与媒体清单处理有模块。单扩展的资源嗅探与下载联调待完成。 | TEST-05 |
+| REQ-06 | 桌面媒体执行器接入本地受控组件、成品归属及轨道检查。实际 YouTube 与组件回滚待验收。 | TEST-06 |
+| REQ-07 | 媒体选择器有模块测试。精确格式、播放列表、字幕和音轨选择待桌面联调。 | TEST-07 |
+| REQ-08 | 计划和队列有逻辑与局部界面。共享并发预算、限速和真实休眠场景待实现或验证。 | TEST-08 |
+| REQ-09 | 桌面拒绝未接入的网络配置与授权上下文。统一代理、凭据生命周期和限速中继待接入。 | TEST-09 |
+| REQ-10 | 批量处理与导入导出有辅助代码。桌面批量、剪贴板和拖放待验证。 | TEST-10 |
+| REQ-11 | 有 CI 与未签名预览打包流程。固定 MDM 底座、组件来源、安装更新和数据迁移待验证。 | TEST-11 |
+| REQ-12 | 有共享 DTO 和 MCP 原型。CLI/MCP 下载命令当前返回不可用，共享任务服务待接入。 | TEST-12 |
+| REQ-13 | FTP/FTPS 恢复条件可计算。主动/被动传输、TLS 和代理待接入与实测。 | TEST-13 |
+| REQ-14 | 有认证策略。NTLM/Kerberos/Negotiate 运行时和域环境待验收。 | TEST-14 |
+| REQ-15 | 有抓取规则与界面说明。可用四步向导和真实抓取待实现。 | TEST-15 |
+| REQ-16 | 有周期同步决策。调度、冲突备份及断电恢复待验证完整执行。 | TEST-16 |
+| REQ-17 | 有 ZIP 尾部解析。远程 Range、ZIP64 及界面待端到端验证。 | TEST-17 |
+| REQ-18 | 有完成动作状态机。系统动作和 IDM 遗留行为待核对。 | TEST-18 |
+| REQ-19 | 有三平台 CI 配置。macOS/Linux 桌面、浏览器注册和真实下载待验收。 | TEST-19 |

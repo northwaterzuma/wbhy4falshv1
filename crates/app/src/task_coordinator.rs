@@ -4,8 +4,9 @@ use crate::model::{ContextRecord, HandoffRecord, HandoffState, TaskRecord};
 use mdm_ipc::*;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+use uuid::Uuid;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct TaskCoordinator {
     pub schema_version: u32,
     pub tasks: BTreeMap<String, TaskRecord>,
@@ -14,8 +15,6 @@ pub struct TaskCoordinator {
     pub tombstones: BTreeMap<(String, String), u64>,                 // (caller_key, idem_key) -> deleted_at_epoch_ms
     pub op_dedup: BTreeMap<(String, String, String), BrowserBridgeResponse>, // (caller_key, op, request_id)
     pub contexts: BTreeMap<String, ContextRecord>,
-    next_task_counter: u64,
-    next_attempt_counter: u64,
 }
 
 impl TaskCoordinator {
@@ -28,8 +27,6 @@ impl TaskCoordinator {
             tombstones: BTreeMap::new(),
             op_dedup: BTreeMap::new(),
             contexts: BTreeMap::new(),
-            next_task_counter: 1,
-            next_attempt_counter: 1,
         }
     }
 
@@ -39,6 +36,28 @@ impl TaskCoordinator {
 
     fn hash_token(token: &str) -> String {
         hex::encode(Sha256::digest(token.as_bytes()))
+    }
+
+    fn handoff_time(epoch_ms: u64) -> String {
+        chrono::DateTime::from_timestamp_millis(epoch_ms.min(i64::MAX as u64) as i64)
+            .unwrap_or(chrono::DateTime::UNIX_EPOCH).to_rfc3339()
+    }
+
+    pub(crate) fn expire_handoffs(&mut self, now: u64) -> bool {
+        let mut changed = false;
+        for handoff in self.handoffs_by_idem.values_mut() {
+            if handoff.state != HandoffState::Pending || now <= handoff.expires_at_epoch_ms {
+                continue;
+            }
+            handoff.state = HandoffState::AwaitingUser;
+            if let Some(task) = self.tasks.get_mut(&handoff.task_id) {
+                task.state = TaskState::AwaitingUser;
+                task.reason = Some("handoff_reconcile".into());
+                task.revision += 1;
+            }
+            changed = true;
+        }
+        changed
     }
 
     /// Two-phase browser handoff Step 1: `handoff.prepare`.
@@ -142,7 +161,15 @@ impl TaskCoordinator {
                     None,
                 );
             }
-            let task = self.tasks.get(&existing_handoff.task_id).unwrap();
+            let Some(task) = self.tasks.get(&existing_handoff.task_id) else {
+                return BrowserBridgeResponse::error(request_id, ErrorCode::NotFound, "Task record was removed", false, None);
+            };
+            if existing_handoff.state == HandoffState::Committed {
+                return self.query_handoff_status(caller, request_id, idempotency_key);
+            }
+            if existing_handoff.state != HandoffState::Pending || now_epoch_ms > existing_handoff.expires_at_epoch_ms {
+                return BrowserBridgeResponse::error(request_id, ErrorCode::LeaseExpired, "Handoff lease expired", false, None);
+            }
             let token = format!("htok-{}-{}", existing_handoff.task_id, existing_handoff.caller_key);
             let resp = BrowserBridgeResponse {
                 version: PROTOCOL_VERSION_V1,
@@ -153,7 +180,7 @@ impl TaskCoordinator {
                 revision: Some(DecimalU64(task.revision)),
                 durable: Some(true),
                 handoff_token: Some(token),
-                expires_at: Some("2026-11-16T08:02:00Z".to_string()),
+                expires_at: Some(Self::handoff_time(existing_handoff.expires_at_epoch_ms)),
                 data: None,
                 error: None,
             };
@@ -161,10 +188,10 @@ impl TaskCoordinator {
             return resp;
         }
 
-        let task_id = format!("task-{}", self.next_task_counter);
-        self.next_task_counter += 1;
+        let task_id = format!("task-{}", Uuid::new_v4());
 
         let token = format!("htok-{}-{}", task_id, ckey);
+        let expires = now_epoch_ms.saturating_add(120_000);
         let handoff = HandoffRecord {
             caller_key: ckey.clone(),
             idempotency_key: idempotency_key.to_string(),
@@ -172,7 +199,7 @@ impl TaskCoordinator {
             task_id: task_id.clone(),
             state: HandoffState::Pending,
             handoff_token_hash: Self::hash_token(&token),
-            expires_at_epoch_ms: now_epoch_ms + 120_000,
+            expires_at_epoch_ms: expires,
             browser_download_id: dl_id,
             committed_revision: None,
         };
@@ -203,7 +230,7 @@ impl TaskCoordinator {
             revision: Some(DecimalU64(1)),
             durable: Some(true),
             handoff_token: Some(token),
-            expires_at: Some("2026-11-16T08:02:00Z".to_string()),
+            expires_at: Some(Self::handoff_time(expires)),
             data: None,
             error: None,
         };
@@ -256,7 +283,9 @@ impl TaskCoordinator {
 
         // Replay of an already committed handoff returns the persisted committed result
         if handoff.state == HandoffState::Committed {
-            let task = self.tasks.get(task_id).unwrap();
+            let Some(task) = self.tasks.get(task_id) else {
+                return BrowserBridgeResponse::error(request_id, ErrorCode::AlreadyCommitted, "Handoff already committed; task record removed", false, None);
+            };
             let resp = BrowserBridgeResponse {
                 version: PROTOCOL_VERSION_V1,
                 request_id: request_id.to_string(),
@@ -284,12 +313,17 @@ impl TaskCoordinator {
             );
         }
 
-        let task = self.tasks.get_mut(task_id).unwrap();
-        if now_epoch_ms > handoff.expires_at_epoch_ms {
+        let Some(task) = self.tasks.get_mut(task_id) else {
+            return BrowserBridgeResponse::error(request_id, ErrorCode::NotFound, "Task record was removed", false, None);
+        };
+        if handoff.state != HandoffState::Pending || now_epoch_ms > handoff.expires_at_epoch_ms {
+            let already_expired = handoff.state == HandoffState::AwaitingUser;
             handoff.state = HandoffState::AwaitingUser;
             task.state = TaskState::AwaitingUser;
             task.reason = Some("handoff_reconcile".to_string());
-            task.revision += 1;
+            if !already_expired {
+                task.revision += 1;
+            }
             return BrowserBridgeResponse::error(
                 request_id,
                 ErrorCode::LeaseExpired,
@@ -360,7 +394,9 @@ impl TaskCoordinator {
                 None,
             );
         }
-        let task = self.tasks.get_mut(task_id).unwrap();
+        let Some(task) = self.tasks.get_mut(task_id) else {
+            return BrowserBridgeResponse::error(request_id, ErrorCode::NotFound, "Task record was removed", false, None);
+        };
         if handoff.state == HandoffState::Aborted {
             return BrowserBridgeResponse {
                 version: PROTOCOL_VERSION_V1,
@@ -407,20 +443,20 @@ impl TaskCoordinator {
         let Some(handoff) = self.handoffs_by_idem.get(&idem_tuple) else {
             return BrowserBridgeResponse::error(request_id, ErrorCode::NotFound, "No handoff found for idempotency_key", false, None);
         };
-        let task = self.tasks.get(&handoff.task_id).unwrap();
+        let task = self.tasks.get(&handoff.task_id);
         BrowserBridgeResponse {
             version: PROTOCOL_VERSION_V1,
             request_id: request_id.to_string(),
             status: ResponseStatus::Ok,
-            task_id: Some(task.task_id.clone()),
-            task_state: Some(task.state),
-            revision: Some(DecimalU64(task.revision)),
+            task_id: Some(handoff.task_id.clone()),
+            task_state: task.map(|task| task.state),
+            revision: task.map(|task| DecimalU64(task.revision)),
             durable: Some(true),
             handoff_token: None,
             expires_at: None,
             data: Some(serde_json::json!({
                 "handoff_state": handoff.state,
-                "expires_at": "2026-11-16T08:02:00Z",
+                "expires_at": Self::handoff_time(handoff.expires_at_epoch_ms),
                 "browser_download_id": handoff.browser_download_id
             })),
             error: None,
@@ -561,8 +597,7 @@ impl TaskCoordinator {
             };
         }
 
-        let task_id = format!("task-{}", self.next_task_counter);
-        self.next_task_counter += 1;
+        let task_id = format!("task-{}", Uuid::new_v4());
         let task = TaskRecord::new_queued(
             task_id.clone(),
             ckey,
@@ -631,8 +666,8 @@ impl TaskCoordinator {
         };
 
         // Repeat control idempotency BEFORE revision guard
-        if (op == ControlOp::Pause && task.state == TaskState::Paused)
-            || (op == ControlOp::Cancel && task.state == TaskState::Cancelled)
+        if (op == ControlOp::Pause && matches!(task.state, TaskState::Pausing | TaskState::Paused))
+            || (op == ControlOp::Cancel && matches!(task.state, TaskState::Cancelling | TaskState::Cancelled))
         {
             return BrowserBridgeResponse {
                 version: PROTOCOL_VERSION_V1,
@@ -673,23 +708,33 @@ impl TaskCoordinator {
             );
         }
 
+        let active = matches!(task.state, TaskState::Resolving | TaskState::Running | TaskState::Finishing);
+        let stopping = matches!(task.state, TaskState::Pausing | TaskState::Cancelling);
         match op {
             ControlOp::Pause => {
-                if task.state.is_terminal() {
-                    return BrowserBridgeResponse::error(request_id, ErrorCode::InvalidState, "Cannot pause terminal task", false, None);
+                if task.state.is_terminal() || stopping || task.state == TaskState::HandoffPending {
+                    return BrowserBridgeResponse::error(request_id, ErrorCode::InvalidState, "Cannot pause this task state", false, None);
                 }
-                task.state = TaskState::Paused;
+                task.state = if active && task.attempt_id.is_some() {
+                    TaskState::Pausing
+                } else {
+                    TaskState::Paused
+                };
                 task.revision += 1;
             }
             ControlOp::Resume | ControlOp::Retry => {
-                if task.state == TaskState::Completed {
-                    return BrowserBridgeResponse::error(request_id, ErrorCode::InvalidState, "Task already completed", false, None);
+                if !matches!(task.state, TaskState::Queued | TaskState::Paused | TaskState::Failed) {
+                    return BrowserBridgeResponse::error(request_id, ErrorCode::InvalidState, "Task is not ready to start", false, None);
                 }
-                let attempt = format!("att-{}", self.next_attempt_counter);
-                self.next_attempt_counter += 1;
+                let attempt = format!("att-{}", Uuid::new_v4());
                 task.attempt_id = Some(attempt);
                 task.state = TaskState::Running;
                 task.phase = Some(TaskPhase::Transfer);
+                if task.source_kind != "direct_http" {
+                    task.bytes_received = 0;
+                }
+                task.error_code = None;
+                task.reason = None;
                 task.revision += 1;
             }
             ControlOp::Cancel => {
@@ -703,12 +748,19 @@ impl TaskCoordinator {
                         self.tombstones.insert(idem_tuple, now_epoch_ms);
                     }
                 }
-                task.state = TaskState::Cancelled;
-                task.phase = None;
-                task.attempt_id = None;
+                if (active || stopping) && task.attempt_id.is_some() {
+                    task.state = TaskState::Cancelling;
+                } else {
+                    task.state = TaskState::Cancelled;
+                    task.phase = None;
+                    task.attempt_id = None;
+                }
                 task.revision += 1;
             }
             ControlOp::RemoveRecord => {
+                if active || stopping {
+                    return BrowserBridgeResponse::error(request_id, ErrorCode::InvalidState, "Stop the task before removing it", false, None);
+                }
                 let idem_tuple = (task.caller_key.clone(), task.idempotency_key.clone());
                 if let Some(h) = self.handoffs_by_idem.get_mut(&idem_tuple) {
                     if h.state != HandoffState::Committed {
@@ -732,6 +784,9 @@ impl TaskCoordinator {
                 };
             }
             ControlOp::DeleteFiles => {
+                if active || stopping {
+                    return BrowserBridgeResponse::error(request_id, ErrorCode::InvalidState, "Stop the task before deleting files", false, None);
+                }
                 for p in &task.owned_artifact_paths {
                     if !p.contains("..") {
                         let _ = std::fs::remove_file(p);
@@ -776,10 +831,10 @@ impl TaskCoordinator {
                 retry_after_ms: None,
             });
         };
-        if task.state == TaskState::Completed {
+        if !matches!(task.state, TaskState::Resolving | TaskState::Running | TaskState::Finishing) {
             return Err(ErrorDetail {
                 code: ErrorCode::InvalidState,
-                message: "Completed task cannot be modified by late worker events".to_string(),
+                message: "Task is not accepting progress or completion events".to_string(),
                 retryable: false,
                 retry_after_ms: None,
             });
@@ -792,7 +847,7 @@ impl TaskCoordinator {
                 retry_after_ms: None,
             });
         }
-        if new_bytes > task.bytes_received {
+        if task.source_kind == "direct_http" || new_bytes > task.bytes_received {
             task.bytes_received = new_bytes;
         }
         task.last_seq += 1;
@@ -802,6 +857,24 @@ impl TaskCoordinator {
             task.revision += 1;
         }
         Ok((task.revision, task.last_seq))
+    }
+
+    pub(crate) fn finish_stopping(&mut self, task_id: &str, attempt_id: &str) -> bool {
+        let Some(task) = self.tasks.get_mut(task_id) else {
+            return false;
+        };
+        if task.attempt_id.as_deref() != Some(attempt_id) {
+            return false;
+        }
+        task.state = match task.state {
+            TaskState::Pausing => TaskState::Paused,
+            TaskState::Cancelling => TaskState::Cancelled,
+            _ => return false,
+        };
+        task.attempt_id = None;
+        task.phase = None;
+        task.revision += 1;
+        true
     }
 
     /// Marks the active attempt as failed after the worker reports a terminal error.
@@ -821,10 +894,10 @@ impl TaskCoordinator {
                 retry_after_ms: None,
             });
         };
-        if task.state.is_terminal() {
+        if !matches!(task.state, TaskState::Resolving | TaskState::Running | TaskState::Finishing) {
             return Err(ErrorDetail {
                 code: ErrorCode::InvalidState,
-                message: "Terminal task cannot be marked failed".to_string(),
+                message: "Task is not accepting failure events".to_string(),
                 retryable: false,
                 retry_after_ms: None,
             });

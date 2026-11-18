@@ -1,5 +1,7 @@
 # 接口契约使用说明
 
+当前公开文件 Host 可在受信的 Native Messaging 连接上接收 `hello.enroll.installation_key`。扩展在私有本地存储生成 32 字节随机值。Host 由实际来源和随机值确定安装标识，并以一次性挑战校验 HMAC。原始值只留在扩展和当前 Host 握手内存中，下载记录只保留安装标识。
+
 这些文件定义目标接口，并非现成 SDK。实现时 Rust 的 serde 类型为唯一源，导出对应 JSON Schema 和扩展 TypeScript 类型；第一次导出须与本包逐项比对，不能通过删约束让测试通过。
 
 | 文件 | 内容 |

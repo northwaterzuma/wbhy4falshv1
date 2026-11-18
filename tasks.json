@@ -84,7 +84,7 @@
       "tests": [
         "TEST-02A"
       ],
-      "status": "done",
+      "status": "in_progress",
       "artifacts": [
         "tests/fixtures/manifest.json",
         "tests/fixtures/media/",
@@ -112,11 +112,13 @@
       "tests": [
         "TEST-02B"
       ],
-      "status": "done",
+      "status": "in_progress",
       "artifacts": [
         "crates/engine/",
         "evidence/P1-T01/",
-        "docs/HTTP_CAPABILITIES.md"
+        "docs/HTTP_CAPABILITIES.md",
+        "crates/engine/src/http_transfer.rs",
+        "crates/engine/tests/native_http.rs"
       ],
       "done_when": [
         "实际验证 206/200/416、长度/验证器、identity 编码及分段覆盖；拒绝错误响应写入，安全降级到单连接。",
@@ -143,12 +145,14 @@
         "TEST-03B",
         "TEST-12B"
       ],
-      "status": "done",
+      "status": "in_progress",
       "artifacts": [
         "crates/app/src/task_coordinator.rs 或等价模块",
         "crates/ipc/src/task_api.rs 或等价类型",
         "docs/TASK_CONTRACT.md",
-        "evidence/P1-T02/"
+        "evidence/P1-T02/",
+        "crates/app/src/task_store.rs",
+        "crates/app/tests/ui_actions.rs"
       ],
       "done_when": [
         "所有入口共用指定状态与阶段；task_id 稳定、attempt_id 更新、旧事件被拒绝，Completed 仅在 Commit 成功落盘后成立。",
@@ -206,7 +210,10 @@
         "extension/",
         "crates/nmhost/",
         "docs/HANDOFF_PROTOCOL.md",
-        "evidence/P2-T01/"
+        "evidence/P2-T01/",
+        "crates/app/src/browser_bridge.rs",
+        "crates/nmhost/src/main.rs",
+        "tests/browser_handoff.test.mjs"
       ],
       "done_when": [
         "校验真实扩展身份、协议版本、帧大小与字段；消息只携带元数据，重试使用同幂等键。",
@@ -263,7 +270,7 @@
         "TEST-09B",
         "TEST-09C"
       ],
-      "status": "done",
+      "status": "in_progress",
       "artifacts": [
         "docs/NETWORK_CONTEXT.md",
         "crates/tools/src/media_policy.rs 或等价模块",
@@ -297,7 +304,8 @@
         "dist/extension/（实现后生成）",
         "docs/EXTENSION_INSTALL.md",
         "docs/baseline/REUSE_REGISTER.md 的移植记录",
-        "evidence/P2-T04/"
+        "evidence/P2-T04/",
+        "tests/browser_handoff.test.mjs"
       ],
       "done_when": [
         "保留猫抓 API 桥接为开发验证路线；首发将必要捕获能力按许可整合进本产品扩展，运行不依赖另装猫抓。",
@@ -388,7 +396,7 @@
         "TEST-06F",
         "TEST-07D"
       ],
-      "status": "done",
+      "status": "in_progress",
       "artifacts": [
         "docs/FLUX_EVALUATION.md",
         "crates/tools/ 可选适配器",

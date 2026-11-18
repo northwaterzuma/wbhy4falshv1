@@ -7,6 +7,7 @@ use std::time::Duration;
 
 impl eframe::App for RustCatchDesktopApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.drain_browser_requests();
         self.drain_worker_events();
         let mut action: Option<AppAction> = None;
 
@@ -45,6 +46,9 @@ impl eframe::App for RustCatchDesktopApp {
                     }
                     if ui.button("停止 (Stop)").clicked() {
                         action = Some(AppAction::StopSelected);
+                    }
+                    if ui.button("取消下载").clicked() {
+                        action = Some(AppAction::CancelSelected);
                     }
                     ui.separator();
                     if ui.button("计划任务 / 队列").clicked() {
@@ -312,6 +316,8 @@ impl eframe::App for RustCatchDesktopApp {
                 mdm_ipc::TaskState::Running
                     | mdm_ipc::TaskState::Resolving
                     | mdm_ipc::TaskState::Finishing
+                    | mdm_ipc::TaskState::Pausing
+                    | mdm_ipc::TaskState::Cancelling
             )
         });
         if any_running {
@@ -378,13 +384,22 @@ impl RustCatchDesktopApp {
                 }
             }
             UiDialog::DownloadInfo => {
-                let pending_url = self.pending_url.clone();
+                let mut pending_url = self.pending_url.clone();
+                let is_new = self.pending_task_id.is_none();
+                let mut direct_http = self.pending_direct_http;
+                let needs_url = self.pending_task_id.as_ref()
+                    .and_then(|id| self.coordinator.tasks.get(id))
+                    .is_some_and(|task| task.reason.as_deref() == Some("source_reentry"));
                 let pending_error = self.dialog_error.clone().unwrap_or_default();
                 let mut file_name = self.pending_file_name.clone();
                 let mut directory = self.pending_directory.clone();
                 let mut category = self.pending_category.clone();
                 let mut queue_id = self.pending_queue_id.clone();
                 let mut start_now = self.pending_start_now;
+                let mut recovery = None;
+                let handoff_needs_check = self.pending_task_id.as_ref()
+                    .and_then(|id| self.coordinator.tasks.get(id))
+                    .is_some_and(|task| task.reason.as_deref() == Some("handoff_reconcile"));
                 let error = pending_error;
                 let mut submit = false;
                 let mut cancel = false;
@@ -430,7 +445,17 @@ impl RustCatchDesktopApp {
                     .default_width(560.0)
                     .show(ctx, |ui| {
                         ui.label("地址");
-                        ui.label(&pending_url);
+                        if needs_url {
+                            ui.add(egui::TextEdit::singleline(&mut pending_url).hint_text("重新输入原文件地址").password(true));
+                        } else {
+                            ui.label(&pending_url);
+                        }
+                        if is_new {
+                            ui.horizontal(|ui| {
+                                ui.radio_value(&mut direct_http, true, "普通 HTTP/HTTPS 文件");
+                                ui.radio_value(&mut direct_http, false, "媒体网页");
+                            });
+                        }
                         ui.separator();
                         ui.label("当前状态");
                         for line in &detail_lines {
@@ -464,7 +489,10 @@ impl RustCatchDesktopApp {
                         }
                         ui.separator();
                         ui.horizontal(|ui| {
-                            if ui.button("确定 (OK)").clicked() {
+                            if handoff_needs_check {
+                                if ui.button("我已确认浏览器取消，继续下载").clicked() { recovery = Some(true); }
+                                if ui.button("放弃桌面接管").clicked() { recovery = Some(false); }
+                            } else if ui.button("确定 (OK)").clicked() {
                                 submit = true;
                             }
                             if ui.button("取消").clicked() {
@@ -473,12 +501,16 @@ impl RustCatchDesktopApp {
                         });
                     });
                 self.pending_file_name = file_name;
+                self.pending_direct_http = direct_http;
+                self.pending_url = pending_url;
                 self.pending_directory = directory;
                 self.pending_category = category;
                 self.pending_queue_id = queue_id;
                 self.pending_start_now = start_now;
                 self.dialog_error = if error.is_empty() { None } else { Some(error) };
-                if submit {
+                if let Some(proceed) = recovery {
+                    keep_open = !self.recover_selected_handoff(proceed);
+                } else if submit {
                     if self.confirm_pending_download() {
                         keep_open = false;
                     } else {

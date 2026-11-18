@@ -14,6 +14,7 @@ pub struct TaskRecord {
     pub source_kind: String,
     pub source_display: String,
     /// Raw page URL kept out of snapshots and logs; only the worker uses it.
+    #[serde(skip)]
     pub worker_source_url: String,
     pub protected_source_ref: String,
     pub output: OutputPolicy,
@@ -87,7 +88,11 @@ impl TaskRecord {
             SourceSpec::Dash { url, .. } => ("dash", url.as_str()),
             SourceSpec::CapturedFile { url, .. } => ("captured_file", url.as_str()),
         };
-        let redacted = mdm_ipc::redact_sensitive_url(raw_url);
+        let redacted = if source_kind == "direct_http" {
+            crate::task_store::non_sensitive_url(raw_url)
+        } else {
+            mdm_ipc::redact_sensitive_url(raw_url)
+        };
         let category = infer_category(&output.file_name_hint, media_intent.is_some());
         Self {
             schema_version: CURRENT_SCHEMA_VERSION,

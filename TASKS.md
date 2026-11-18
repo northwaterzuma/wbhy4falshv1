@@ -1,6 +1,6 @@
 # RustCatch 实施任务
 
-规格版本：1.0。执行依据：本包主规格、SOURCE_LOCK.json、协议 Schema 与 ACCEPTANCE.md。本文及 tasks.json 是开发计划，**全部任务初始为 not_started（未开始）**；下列代码和证据路径均为拟交付位置，不表示已存在或已通过测试。
+规格版本 1.0。验收依据见主规格、SOURCE_LOCK.json、协议 Schema 和 ACCEPTANCE.md。本表与 tasks.json 记录当前任务状态。文件路径和历史 CI 结果须结合实际用例证据判定。
 
 ## 1. 执行范围与完成含义
 
@@ -14,6 +14,8 @@
 用户当前目标为完整开发。**P4-T03 是阶段门槛，不是项目终点。** 只有当前用户明确缩小范围，才能在首发停止。P5 的技术依赖不硬等发布签字，缺少某项真机或账号时仍可推进其他满足依赖的工作。
 
 任务状态只用 not_started / in_progress / needs_env / blocked / done。needs_env 表示实现或某个验证等待必要环境，并不算通过。任务 done 必须满足本任务完成标准；具体 TEST 中本任务负责的子用例通过，不能只凭代码已写或编译成功。基础任务可完成其明确的子用例，不要求尚未实现的整个上层套件提前通过。
+
+P1-T01 已接入原生 HTTP/HTTPS 单流与强 ETag 续传，P1-T02 已接入普通下载和交接账本持久化。多连接、掉电与迁移仍按原任务验收。P2-T01/P2-T04 的公开 GET 接管和显式发送已有生产入口，待真实 Chrome/Edge 注册、权限、下载、回退与扩展休眠测试。运行记录见 [HANDOFF.md](HANDOFF.md)。
 
 ## 2. 统一语义与并行边界
 
@@ -29,34 +31,34 @@ P2-T02 使用猫抓 API 验证捕获；P2-T04 将必要能力整合为正式单�
 
 ## 3. 任务图
 
-| 任务 | scope | 前置依赖 | 初始状态 |
+| 任务 | scope | 前置依赖 | 当前状态 |
 |---|---|---|---|
-| P0-T01 冻结 IDM 界面、行为及完整差距基线 | launch | 无 | 未开始 |
-| P0-T02 复现固定 MDM 底座与依赖审计 | launch | 无 | 未开始 |
-| P0-T03 (done) 建立离线 fixtures 与故障服务器 | launch | 无 | 未开始 |
-| P1-T01 (done) 实现并验证普通 HTTP 下载正确性 | launch | P0-T02、P0-T03 | 未开始 |
-| P1-T02 (done) 统一任务契约、事件和持久化恢复 | launch | P1-T01 (done) | 未开始 |
-| P1-T03 把 IDM 风格核心界面绑定到真实任务 | launch | P0-T01、P1-T02 | 未开始 |
-| P2-T01 实现可信 Native Messaging 和两阶段接管 | launch | P1-T02 (done) | 未开始 |
-| P2-T02 接入猫抓资源 API 与媒体候选 | launch | P2-T01、P2-T03 | 未开始 |
-| P2-T03 (done) 固定网络、凭据和资源预算契约 | launch | P0-T02、P1-T02 | 未开始 |
-| P2-T04 整合为用户只安装一套的正式扩展 | launch | P2-T02 | 未开始 |
-| P3-T01 实现默认 yt-dlp 完整 YouTube 管线 | launch | P1-T02、P2-T03、P0-T03 | 未开始 |
-| P3-T02 完成格式、音轨、字幕与播放列表交互 | launch | P3-T01 | 未开始 |
-| P3-T03 (done) 评估 Flux 实验性备用适配器 | optional | P3-T01 | 未开始 |
-| P4-T01 实现队列、计划、分类与批量入口 | launch | P1-T02、P1-T03、P2-T01 | 未开始 |
-| P4-T02 实现发行、数据迁移与 MCP 边界 | launch | P0-T02、P1-T02 | 未开始 |
-| P4-T03 完成 Windows 首发集成门槛并继续全量目标 | launch | P2-T04、P3-T02、P4-T01、P4-T02 | 未开始 |
-| P5-T01 补齐 FTP/FTPS 与高级认证 | full_parity | P0-T01、P1-T02、P2-T03 | 未开始 |
-| P5-T02 补齐站点抓取与周期同步 | full_parity | P0-T01、P4-T01、P2-T03 | 未开始 |
-| P5-T03 补齐 ZIP 预览及 IDM 剩余差距 | full_parity | P0-T01、P1-T02、P4-T01 | 未开始 |
-| P5-T04 完成 macOS/Linux 平台适配与全量评审 | cross_platform | P1-T03、P2-T04、P3-T02、P4-T01 | 未开始 |
+| P0-T01 冻结 IDM 界面、行为及完整差距基线 | launch | 无 | needs_env |
+| P0-T02 复现固定 MDM 底座与依赖审计 | launch | 无 | needs_env |
+| P0-T03 建立离线 fixtures 与故障服务器 | launch | 无 | in_progress |
+| P1-T01 实现并验证普通 HTTP 下载正确性 | launch | P0-T02、P0-T03 | in_progress |
+| P1-T02 统一任务契约、事件和持久化恢复 | launch | P1-T01 | in_progress |
+| P1-T03 把 IDM 风格核心界面绑定到真实任务 | launch | P0-T01、P1-T02 | needs_env |
+| P2-T01 实现可信 Native Messaging 和两阶段接管 | launch | P1-T02 | needs_env |
+| P2-T02 接入猫抓资源 API 与媒体候选 | launch | P2-T01、P2-T03 | needs_env |
+| P2-T03 固定网络、凭据和资源预算契约 | launch | P0-T02、P1-T02 | in_progress |
+| P2-T04 整合为用户只安装一套的正式扩展 | launch | P2-T02 | needs_env |
+| P3-T01 实现默认 yt-dlp 完整 YouTube 管线 | launch | P1-T02、P2-T03、P0-T03 | needs_env |
+| P3-T02 完成格式、音轨、字幕与播放列表交互 | launch | P3-T01 | needs_env |
+| P3-T03 评估 Flux 实验性备用适配器 | optional | P3-T01 | in_progress |
+| P4-T01 实现队列、计划、分类与批量入口 | launch | P1-T02、P1-T03、P2-T01 | needs_env |
+| P4-T02 实现发行、数据迁移与 MCP 边界 | launch | P0-T02、P1-T02 | needs_env |
+| P4-T03 完成 Windows 首发集成门槛并继续全量目标 | launch | P2-T04、P3-T02、P4-T01、P4-T02 | needs_env |
+| P5-T01 补齐 FTP/FTPS 与高级认证 | full_parity | P0-T01、P1-T02、P2-T03 | needs_env |
+| P5-T02 补齐站点抓取与周期同步 | full_parity | P0-T01、P4-T01、P2-T03 | needs_env |
+| P5-T03 补齐 ZIP 预览及 IDM 剩余差距 | full_parity | P0-T01、P1-T02、P4-T01 | needs_env |
+| P5-T04 完成 macOS/Linux 平台适配与全量评审 | cross_platform | P1-T03、P2-T04、P3-T02、P4-T01 | needs_env |
 
 ## 任务详情
 
 ### P0-T01 冻结 IDM 界面、行为及完整差距基线
 
-- 状态：代码实现存在；GitHub CI 编译/35 项 Rust 测试通过（run 43845781548），真机/浏览器/在线等门槛 needs_env；scope：launch。
+- 当前状态 needs_env。验收进展见 docs/FEATURE_MATRIX.md 与 HANDOFF.md。
 - 依赖：无。
 - 需求：REQ-01、REQ-13、REQ-14、REQ-15、REQ-16、REQ-17、REQ-18。
 - 代码/文件归属：desktop-ui / baseline；docs/baseline/idm/、docs/FEATURE_MATRIX.md。
@@ -73,7 +75,7 @@ P2-T02 使用猫抓 API 验证捕获；P2-T04 将必要能力整合为正式单�
 
 ### P0-T02 复现固定 MDM 底座与依赖审计
 
-- 状态：代码实现存在；GitHub CI 编译/35 项 Rust 测试通过（run 43845781548），真机/浏览器/在线等门槛 needs_env；scope：launch。
+- 当前状态 needs_env。验收进展见 docs/FEATURE_MATRIX.md 与 HANDOFF.md。
 - 依赖：无。
 - 需求：REQ-02、REQ-06、REQ-11。
 - 代码/文件归属：architecture / build；Cargo.toml、Cargo.lock、rust-toolchain.toml、SOURCE_LOCK.json 对应实现副本、docs/baseline/UPSTREAM_AUDIT.md。
@@ -90,7 +92,7 @@ P2-T02 使用猫抓 API 验证捕获；P2-T04 将必要能力整合为正式单�
 
 ### P0-T03 建立离线 fixtures 与故障服务器
 
-- 状态：代码实现存在；GitHub CI 编译/35 项 Rust 测试通过（run 43845781548），真机/浏览器/在线等门槛 needs_env；scope：launch。
+- 当前状态 in_progress。验收进展见 docs/FEATURE_MATRIX.md 与 HANDOFF.md。
 - 依赖：无。
 - 需求：REQ-02、REQ-03、REQ-05、REQ-06、REQ-09、REQ-11。
 - 代码/文件归属：release-test；tests/fixtures/、tests/faults/、现有 crates/labserver 等价目录、CI 测试定义。
@@ -107,7 +109,7 @@ P2-T02 使用猫抓 API 验证捕获；P2-T04 将必要能力整合为正式单�
 
 ### P1-T01 实现并验证普通 HTTP 下载正确性
 
-- 状态：代码实现存在；GitHub CI 编译/35 项 Rust 测试通过（run 43845781548），真机/浏览器/在线等门槛 needs_env；scope：launch。
+- 当前状态 in_progress。验收进展见 docs/FEATURE_MATRIX.md 与 HANDOFF.md。
 - 依赖：P0-T02、P0-T03。
 - 需求：REQ-02。
 - 代码/文件归属：engine-recovery；crates/engine/src/download.rs、planner.rs、state.rs。
@@ -124,7 +126,7 @@ P2-T02 使用猫抓 API 验证捕获；P2-T04 将必要能力整合为正式单�
 
 ### P1-T02 统一任务契约、事件和持久化恢复
 
-- 状态：代码实现存在；GitHub CI 编译/35 项 Rust 测试通过（run 43845781548），真机/浏览器/在线等门槛 needs_env；scope：launch。
+- 当前状态 in_progress。验收进展见 docs/FEATURE_MATRIX.md 与 HANDOFF.md。
 - 依赖：P1-T01。
 - 需求：REQ-03、REQ-04、REQ-06、REQ-12。
 - 代码/文件归属：architecture / coordinator；crates/app/src/model.rs、task_coordinator.rs（拟新增）、crates/ipc/src/task_api.rs（拟新增）及既有状态存储。
@@ -141,7 +143,7 @@ P2-T02 使用猫抓 API 验证捕获；P2-T04 将必要能力整合为正式单�
 
 ### P1-T03 把 IDM 风格核心界面绑定到真实任务
 
-- 状态：代码实现存在；GitHub CI 编译/35 项 Rust 测试通过（run 43845781548），真机/浏览器/在线等门槛 needs_env；scope：launch。
+- 当前状态 needs_env。验收进展见 docs/FEATURE_MATRIX.md 与 HANDOFF.md。
 - 依赖：P0-T01、P1-T02。
 - 需求：REQ-01、REQ-03。
 - 代码/文件归属：desktop-ui；crates/app/src/ 的窗口/控件模块；app.rs 由协调负责人合并。
@@ -158,7 +160,7 @@ P2-T02 使用猫抓 API 验证捕获；P2-T04 将必要能力整合为正式单�
 
 ### P2-T01 实现可信 Native Messaging 和两阶段接管
 
-- 状态：代码实现存在；GitHub CI 编译/35 项 Rust 测试通过（run 43845781548），真机/浏览器/在线等门槛 needs_env；scope：launch。
+- 当前状态 needs_env。验收进展见 docs/FEATURE_MATRIX.md 与 HANDOFF.md。
 - 依赖：P1-T02。
 - 需求：REQ-04。
 - 代码/文件归属：browser-capture；extension/background.js、crates/nmhost/、crates/ipc/ 的桥接入口。
@@ -175,7 +177,7 @@ P2-T02 使用猫抓 API 验证捕获；P2-T04 将必要能力整合为正式单�
 
 ### P2-T02 接入猫抓资源 API 与媒体候选
 
-- 状态：代码实现存在；GitHub CI 编译/35 项 Rust 测试通过（run 43845781548），真机/浏览器/在线等门槛 needs_env；scope：launch。
+- 当前状态 needs_env。验收进展见 docs/FEATURE_MATRIX.md 与 HANDOFF.md。
 - 依赖：P2-T01、P2-T03。
 - 需求：REQ-05、REQ-09。
 - 代码/文件归属：browser-capture / media；extension/ 捕获模块、crates/app/src/capture.rs（拟新增）、crates/tools/src/streams.rs。
@@ -192,7 +194,7 @@ P2-T02 使用猫抓 API 验证捕获；P2-T04 将必要能力整合为正式单�
 
 ### P2-T03 固定网络、凭据和资源预算契约
 
-- 状态：代码实现存在；GitHub CI 编译/35 项 Rust 测试通过（run 43845781548），真机/浏览器/在线等门槛 needs_env；scope：launch。
+- 当前状态 in_progress。验收进展见 docs/FEATURE_MATRIX.md 与 HANDOFF.md。
 - 依赖：P0-T02、P1-T02。
 - 需求：REQ-09、REQ-06、REQ-08。
 - 代码/文件归属：architecture / network；crates/engine/ 的网络策略、crates/tools/src/media_policy.rs（拟新增）、可信上下文与系统凭据适配层。
@@ -209,7 +211,7 @@ P2-T02 使用猫抓 API 验证捕获；P2-T04 将必要能力整合为正式单�
 
 ### P2-T04 整合为用户只安装一套的正式扩展
 
-- 状态：代码实现存在；GitHub CI 编译/35 项 Rust 测试通过（run 43845781548），真机/浏览器/在线等门槛 needs_env；scope：launch。
+- 当前状态 needs_env。验收进展见 docs/FEATURE_MATRIX.md 与 HANDOFF.md。
 - 依赖：P2-T02。
 - 需求：REQ-04、REQ-05、REQ-11。
 - 代码/文件归属：browser-capture / release；extension/manifest.json、捕获与浮条模块、扩展打包/升级配置。
@@ -226,7 +228,7 @@ P2-T02 使用猫抓 API 验证捕获；P2-T04 将必要能力整合为正式单�
 
 ### P3-T01 实现默认 yt-dlp 完整 YouTube 管线
 
-- 状态：代码实现存在；GitHub CI 编译/35 项 Rust 测试通过（run 43845781548），真机/浏览器/在线等门槛 needs_env；scope：launch。
+- 当前状态 needs_env。验收进展见 docs/FEATURE_MATRIX.md 与 HANDOFF.md。
 - 依赖：P1-T02、P2-T03、P0-T03。
 - 需求：REQ-06、REQ-09。
 - 代码/文件归属：media-pipeline；crates/tools/src/video.rs、proc.rs、media_policy.rs 及组件管理器。
@@ -243,7 +245,7 @@ P2-T02 使用猫抓 API 验证捕获；P2-T04 将必要能力整合为正式单�
 
 ### P3-T02 完成格式、音轨、字幕与播放列表交互
 
-- 状态：代码实现存在；GitHub CI 编译/35 项 Rust 测试通过（run 43845781548），真机/浏览器/在线等门槛 needs_env；scope：launch。
+- 当前状态 needs_env。验收进展见 docs/FEATURE_MATRIX.md 与 HANDOFF.md。
 - 依赖：P3-T01。
 - 需求：REQ-07、REQ-01。
 - 代码/文件归属：media-pipeline / desktop-ui；crates/tools/src/media_policy.rs、媒体选择 DTO、crates/app/ 视频窗口。
@@ -260,7 +262,7 @@ P2-T02 使用猫抓 API 验证捕获；P2-T04 将必要能力整合为正式单�
 
 ### P3-T03 评估 Flux 实验性备用适配器
 
-- 状态：代码实现存在；GitHub CI 编译/35 项 Rust 测试通过（run 43845781548），真机/浏览器/在线等门槛 needs_env；scope：optional。
+- 当前状态 in_progress。验收进展见 docs/FEATURE_MATRIX.md 与 HANDOFF.md。
 - 依赖：P3-T01。
 - 需求：REQ-06、REQ-07。
 - 代码/文件归属：media-pipeline（独立适配器负责人）；crates/tools/ 的 feature-gated adapter；不得修改默认解析策略。
@@ -277,7 +279,7 @@ P2-T02 使用猫抓 API 验证捕获；P2-T04 将必要能力整合为正式单�
 
 ### P4-T01 实现队列、计划、分类与批量入口
 
-- 状态：代码实现存在；GitHub CI 编译/35 项 Rust 测试通过（run 43845781548），真机/浏览器/在线等门槛 needs_env；scope：launch。
+- 当前状态 needs_env。验收进展见 docs/FEATURE_MATRIX.md 与 HANDOFF.md。
 - 依赖：P1-T02、P1-T03、P2-T01。
 - 需求：REQ-08、REQ-10、REQ-01。
 - 代码/文件归属：desktop-ui / coordinator；crates/app/src/queue.rs、scheduler.rs、分类与批量窗口；限速实现由 network 负责人合并。
@@ -294,7 +296,7 @@ P2-T02 使用猫抓 API 验证捕获；P2-T04 将必要能力整合为正式单�
 
 ### P4-T02 实现发行、数据迁移与 MCP 边界
 
-- 状态：代码实现存在；GitHub CI 编译/35 项 Rust 测试通过（run 43845781548），真机/浏览器/在线等门槛 needs_env；scope：launch。
+- 当前状态 needs_env。验收进展见 docs/FEATURE_MATRIX.md 与 HANDOFF.md。
 - 依赖：P0-T02、P1-T02。
 - 需求：REQ-11、REQ-12。
 - 代码/文件归属：release-test / MCP；安装器、更新配置、crates/mcp/、crates/nmhost/ 注册逻辑；共享 DTO 由架构负责人合并。
@@ -311,7 +313,7 @@ P2-T02 使用猫抓 API 验证捕获；P2-T04 将必要能力整合为正式单�
 
 ### P4-T03 完成 Windows 首发集成门槛并继续全量目标
 
-- 状态：代码实现存在；GitHub CI 编译/35 项 Rust 测试通过（run 43845781548），真机/浏览器/在线等门槛 needs_env；scope：launch。
+- 当前状态 needs_env。验收进展见 docs/FEATURE_MATRIX.md 与 HANDOFF.md。
 - 依赖：P2-T04、P3-T02、P4-T01、P4-T02。
 - 需求：REQ-01、REQ-02、REQ-03、REQ-04、REQ-05、REQ-06、REQ-07、REQ-08、REQ-09、REQ-10、REQ-11、REQ-12。
 - 代码/文件归属：integration / release-test；发行证据、差距矩阵、安装包整合；不借验收重写模块。
@@ -328,7 +330,7 @@ P2-T02 使用猫抓 API 验证捕获；P2-T04 将必要能力整合为正式单�
 
 ### P5-T01 补齐 FTP/FTPS 与高级认证
 
-- 状态：代码实现存在；GitHub CI 编译/35 项 Rust 测试通过（run 43845781548），真机/浏览器/在线等门槛 needs_env；scope：full_parity。
+- 当前状态 needs_env。验收进展见 docs/FEATURE_MATRIX.md 与 HANDOFF.md。
 - 依赖：P0-T01、P1-T02、P2-T03。
 - 需求：REQ-13、REQ-14。
 - 代码/文件归属：engine-recovery / OS-auth；crates/engine/ 协议适配器、隔离的系统认证适配层、对应设置页面。
@@ -345,7 +347,7 @@ P2-T02 使用猫抓 API 验证捕获；P2-T04 将必要能力整合为正式单�
 
 ### P5-T02 补齐站点抓取与周期同步
 
-- 状态：代码实现存在；GitHub CI 编译/35 项 Rust 测试通过（run 43845781548），真机/浏览器/在线等门槛 needs_env；scope：full_parity。
+- 当前状态 needs_env。验收进展见 docs/FEATURE_MATRIX.md 与 HANDOFF.md。
 - 依赖：P0-T01、P4-T01、P2-T03。
 - 需求：REQ-15、REQ-16。
 - 代码/文件归属：coordinator / desktop-ui；现有抓取与调度等价模块、四步向导、持久化项目模型。
@@ -362,7 +364,7 @@ P2-T02 使用猫抓 API 验证捕获；P2-T04 将必要能力整合为正式单�
 
 ### P5-T03 补齐 ZIP 预览及 IDM 剩余差距
 
-- 状态：代码实现存在；GitHub CI 编译/35 项 Rust 测试通过（run 43845781548），真机/浏览器/在线等门槛 needs_env；scope：full_parity。
+- 当前状态 needs_env。验收进展见 docs/FEATURE_MATRIX.md 与 HANDOFF.md。
 - 依赖：P0-T01、P1-T02、P4-T01。
 - 需求：REQ-17、REQ-18、REQ-01。
 - 代码/文件归属：engine-recovery / desktop-ui / OS；ZIP预览适配器、完成动作、基线中未实现窗口与协议。
@@ -379,7 +381,7 @@ P2-T02 使用猫抓 API 验证捕获；P2-T04 将必要能力整合为正式单�
 
 ### P5-T04 完成 macOS/Linux 平台适配与全量评审
 
-- 状态：代码实现存在；GitHub CI 编译/35 项 Rust 测试通过（run 43845781548），真机/浏览器/在线等门槛 needs_env；scope：cross_platform。
+- 当前状态 needs_env。验收进展见 docs/FEATURE_MATRIX.md 与 HANDOFF.md。
 - 依赖：P1-T03、P2-T04、P3-T02、P4-T01。
 - 需求：REQ-19。
 - 代码/文件归属：platform / release-test；平台安装器、Native Host注册、系统凭据/代理/托盘等平台层；复用现有核心。

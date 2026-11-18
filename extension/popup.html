@@ -10,9 +10,14 @@
   </style>
 </head>
 <body>
-  <h1>RustCatch 媒体与下载桥接</h1>
-  <div class="status" id="bridge-status">Native Host: com.rustcatch.bridge (就绪)</div>
-  <div id="candidate-list">当前标签页暂无待选流媒体资源</div>
+  <h1>RustCatch 浏览器下载接管</h1>
+  <div class="status" id="bridge-status" aria-live="polite"></div>
+  <form id="rule">
+    <p><label>允许接管的文件链接 <input id="url" type="url" required></label></p>
+    <p><label><input id="confirmation" type="checkbox"> 此链接无需登录，允许重复下载</label></p>
+    <p><button type="submit">启用此链接</button> <button id="disable" type="button">关闭接管</button></p>
+  </form>
+  <button id="retry" type="button">核对并重试交接</button>
   <script src="popup.js"></script>
 </body>
 </html>

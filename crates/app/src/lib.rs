@@ -1,5 +1,6 @@
 pub mod app;
 pub mod batch;
+pub mod browser_bridge;
 pub mod capture;
 pub mod fonts;
 pub mod grabber;
@@ -9,6 +10,8 @@ pub mod runner;
 pub mod scheduler;
 pub mod sync;
 pub mod task_coordinator;
+mod task_store;
+mod tool_process;
 pub mod ui;
 
 pub use app::*;
@@ -21,4 +24,5 @@ pub use runner::*;
 pub use scheduler::*;
 pub use sync::*;
 pub use task_coordinator::*;
+pub use task_store::{data_dir, public_download};
 pub use ui::*;

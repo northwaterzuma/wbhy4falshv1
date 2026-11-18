@@ -13,7 +13,10 @@ fn main() -> eframe::Result<()> {
         native_options,
         Box::new(|cc| {
             mdm_app::fonts::install_chinese_font(&cc.egui_ctx);
-            Ok(Box::new(RustCatchDesktopApp::default()))
+            let root = mdm_app::data_dir().ok_or_else(|| std::io::Error::other("无法找到 RustCatch 数据目录"))?;
+            let mut app = RustCatchDesktopApp::open(&root)?;
+            app.start_browser_bridge(&root, cc.egui_ctx.clone());
+            Ok(Box::new(app))
         }),
     )
 }

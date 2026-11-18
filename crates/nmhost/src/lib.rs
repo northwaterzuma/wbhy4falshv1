@@ -56,6 +56,9 @@ impl NativeHostSession {
     /// Writes a 4-byte native-endian length-prefixed JSON response to stdout.
     pub fn write_native_frame<W: Write>(writer: &mut W, resp: &BrowserBridgeResponse) -> io::Result<()> {
         let bytes = serde_json::to_vec(resp).expect("response serializes");
+        if bytes.len() > MAX_FRAME_BYTES {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "Native response exceeds frame limit"));
+        }
         let len_bytes = (bytes.len() as u32).to_ne_bytes();
         writer.write_all(&len_bytes)?;
         writer.write_all(&bytes)?;

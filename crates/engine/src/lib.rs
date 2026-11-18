@@ -1,8 +1,10 @@
 pub mod auth;
 pub mod checkpoint;
 pub mod download;
+pub mod durable;
 pub mod ftp;
 pub mod http_validator;
+pub mod http_transfer;
 pub mod planner;
 pub mod rate_limiter;
 pub mod state;

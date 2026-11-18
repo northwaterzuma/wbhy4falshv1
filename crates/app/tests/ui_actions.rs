@@ -2,7 +2,83 @@ use mdm_app::{
     AppAction, RustCatchDesktopApp, TaskRecord, UiDialog, WorkerEvent, default_download_directory,
     task_matches_category,
 };
-use mdm_ipc::{ErrorCode, ErrorDetail, TaskState};
+use mdm_ipc::{ControlOp, ErrorCode, ErrorDetail, ResponseStatus, TaskState};
+
+#[test]
+fn desktop_reloads_http_tasks_without_persisting_a_signed_query() {
+    let root = std::env::temp_dir().join(format!("rustcatch-ui-{}", uuid::Uuid::new_v4()));
+    let public = "https://example.invalid/file.zip";
+    let signed = "https://example.invalid/signed.zip?signature=fixture-secret";
+    {
+        let mut app = RustCatchDesktopApp::open(&root).unwrap();
+        for url in [public, signed] {
+            assert!(app.prepare_add_url(url));
+            assert!(app.pending_direct_http);
+            app.pending_start_now = false;
+            assert!(app.confirm_pending_download());
+        }
+    }
+    let saved = std::fs::read_to_string(root.join("tasks.json")).unwrap();
+    assert!(saved.contains(public));
+    assert!(!saved.contains("fixture-secret"));
+    {
+        let app = RustCatchDesktopApp::open(&root).unwrap();
+        assert_eq!(app.coordinator.tasks.len(), 2);
+        let public = app.coordinator.tasks.values().find(|task| task.source_display.ends_with("/file.zip")).unwrap();
+        assert_eq!(public.state, TaskState::Queued);
+        assert_eq!(public.worker_source_url, "https://example.invalid/file.zip");
+        let signed = app.coordinator.tasks.values().find(|task| task.source_display.ends_with("/signed.zip")).unwrap();
+        assert_eq!(signed.state, TaskState::AwaitingUser);
+        assert_eq!(signed.reason.as_deref(), Some("source_reentry"));
+        assert!(signed.worker_source_url.is_empty());
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn pausing_waits_for_worker_exit_and_fences_old_completion() {
+    let mut app = RustCatchDesktopApp::default();
+    assert!(app.prepare_add_url("https://example.invalid/watch?token=synthetic"));
+    assert!(!app.status_message.contains("synthetic"));
+    app.pending_start_now = false;
+    assert!(app.confirm_pending_download());
+    let id = app.coordinator.tasks.keys().next().unwrap().clone();
+    let caller = RustCatchDesktopApp::ui_caller();
+    for (request_id, op) in [("start", ControlOp::Resume), ("pause", ControlOp::Pause)] {
+        let revision = app.coordinator.tasks[&id].revision;
+        let reply = app
+            .coordinator
+            .control_task(&caller, request_id, &id, revision, op, 0);
+        assert_eq!(reply.status, ResponseStatus::Ok);
+    }
+    let attempt_id = app.coordinator.tasks[&id].attempt_id.clone().unwrap();
+    assert_eq!(app.coordinator.tasks[&id].state, TaskState::Pausing);
+    app.record_worker_event(WorkerEvent::Completed {
+        task_id: id.clone(),
+        attempt_id: attempt_id.clone(),
+    });
+    assert_eq!(app.coordinator.tasks[&id].state, TaskState::Pausing);
+    app.record_worker_event(WorkerEvent::Stopped {
+        task_id: id.clone(),
+        attempt_id,
+    });
+    assert_eq!(app.coordinator.tasks[&id].state, TaskState::Paused);
+    assert!(app.coordinator.tasks[&id].attempt_id.is_none());
+    for (request_id, op) in [("resume", ControlOp::Resume), ("cancel", ControlOp::Cancel)] {
+        let revision = app.coordinator.tasks[&id].revision;
+        let reply = app
+            .coordinator
+            .control_task(&caller, request_id, &id, revision, op, 0);
+        assert_eq!(reply.status, ResponseStatus::Ok);
+    }
+    assert_eq!(app.coordinator.tasks[&id].state, TaskState::Cancelling);
+    let attempt_id = app.coordinator.tasks[&id].attempt_id.clone().unwrap();
+    app.record_worker_event(WorkerEvent::Stopped {
+        task_id: id.clone(),
+        attempt_id,
+    });
+    assert_eq!(app.coordinator.tasks[&id].state, TaskState::Cancelled);
+}
 
 #[test]
 fn add_url_prepares_download_info_for_youtube_and_creates_task() {

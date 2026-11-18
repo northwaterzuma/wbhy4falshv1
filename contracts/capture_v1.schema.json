@@ -476,6 +476,10 @@
                 },
                 "enroll_new_instance": {
                   "const": true
+                },
+                "installation_key": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
                 }
               },
               "required": [

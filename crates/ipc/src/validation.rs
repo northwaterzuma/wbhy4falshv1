@@ -1,5 +1,7 @@
 use crate::task_api::*;
 use hmac::{Hmac, Mac};
+use serde::{Deserialize, Deserializer, de};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 type HmacSha256 = Hmac<Sha256>;
@@ -21,9 +23,9 @@ pub fn validate_raw_frame(raw: &[u8]) -> Result<serde_json::Value, ErrorDetail> 
         retry_after_ms: None,
     })?;
 
-    check_depth_and_duplicate_keys(text)?;
+    check_depth(text)?;
 
-    serde_json::from_str::<serde_json::Value>(text).map_err(|e| ErrorDetail {
+    serde_json::from_str::<UniqueJson>(text).map(|value| value.0).map_err(|e| ErrorDetail {
         code: ErrorCode::InvalidRequest,
         message: format!("Malformed JSON: {}", e),
         retryable: false,
@@ -33,6 +35,10 @@ pub fn validate_raw_frame(raw: &[u8]) -> Result<serde_json::Value, ErrorDetail> 
 
 /// Checks nesting depth <= 16 and rejects duplicate object keys at the same level.
 pub fn check_depth_and_duplicate_keys(json_str: &str) -> Result<(), ErrorDetail> {
+    validate_raw_frame(json_str.as_bytes()).map(|_| ())
+}
+
+fn check_depth(json_str: &str) -> Result<(), ErrorDetail> {
     let bytes = json_str.as_bytes();
     let mut i = 0;
     let mut depth: usize = 0;
@@ -72,6 +78,56 @@ pub fn check_depth_and_duplicate_keys(json_str: &str) -> Result<(), ErrorDetail>
         i += 1;
     }
     Ok(())
+}
+
+struct UniqueJson(Value);
+
+impl<'de> Deserialize<'de> for UniqueJson {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor;
+        impl<'de> de::Visitor<'de> for Visitor {
+            type Value = UniqueJson;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("JSON without duplicate keys")
+            }
+            fn visit_map<A: de::MapAccess<'de>>(self, mut entries: A) -> Result<Self::Value, A::Error> {
+                let mut values = serde_json::Map::new();
+                while let Some((name, value)) = entries.next_entry::<String, UniqueJson>()? {
+                    if values.insert(name, value.0).is_some() {
+                        return Err(de::Error::custom("duplicate JSON key"));
+                    }
+                }
+                Ok(UniqueJson(Value::Object(values)))
+            }
+            fn visit_seq<A: de::SeqAccess<'de>>(self, mut entries: A) -> Result<Self::Value, A::Error> {
+                let mut values = Vec::new();
+                while let Some(value) = entries.next_element::<UniqueJson>()? {
+                    values.push(value.0);
+                }
+                Ok(UniqueJson(Value::Array(values)))
+            }
+            fn visit_str<E: de::Error>(self, value: &str) -> Result<Self::Value, E> {
+                Ok(UniqueJson(value.into()))
+            }
+            fn visit_bool<E: de::Error>(self, value: bool) -> Result<Self::Value, E> {
+                Ok(UniqueJson(value.into()))
+            }
+            fn visit_i64<E: de::Error>(self, value: i64) -> Result<Self::Value, E> {
+                Ok(UniqueJson(value.into()))
+            }
+            fn visit_u64<E: de::Error>(self, value: u64) -> Result<Self::Value, E> {
+                Ok(UniqueJson(value.into()))
+            }
+            fn visit_f64<E: de::Error>(self, value: f64) -> Result<Self::Value, E> {
+                Ok(UniqueJson(value.into()))
+            }
+            fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+                Ok(UniqueJson(Value::Null))
+            }
+        }
+        deserializer.deserialize_any(Visitor)
+    }
 }
 
 /// Validates HTTP header value against CR/LF/NUL injection and 8192-byte limit.
@@ -254,3 +310,9 @@ mod tests {
         assert!(!redacted.contains("SECRET123"));
     }
 }
+    #[test]
+    fn duplicate_json_keys_are_rejected_at_every_depth() {
+        assert!(validate_raw_frame(br#"{"op":"hello","op":"task.add"}"#).is_err());
+        assert!(validate_raw_frame(br#"{"payload":{"id":1,"\u0069d":2}}"#).is_err());
+        assert!(validate_raw_frame(br#"{"a":{"id":1},"b":{"id":2}}"#).is_ok());
+    }

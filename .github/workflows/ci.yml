@@ -12,7 +12,7 @@ env:
 
 jobs:
   offline-contracts-and-suite:
-    name: Contract Schema & Offline Protocol Suite
+    name: Specification and fixture integrity
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -28,9 +28,12 @@ jobs:
           cd docs/agent-spec
           sha256sum -c CHECKSUMS.sha256
 
-      - name: Run Offline Deterministic Verification Suite (P0..P5)
+      - name: Check JSON syntax and local fixtures
         run: |
           python3 tests/run_offline_verification.py
+
+      - name: Test browser handoff ordering without a browser
+        run: node --test tests/browser_handoff.test.mjs
 
   rust-matrix-build:
     name: Rust Build & Test (${{ matrix.os }})
@@ -56,29 +59,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev pkg-config
 
-      - name: Install Rust Toolchain (MSRV 1.95 / stable fallback)
+      - name: Install the pinned Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: stable
+          toolchain: 1.95.0
           targets: ${{ matrix.target }}
           components: rustfmt, clippy
 
-      - name: Verify Upstream MDM Commit Object (SOURCE_LOCK)
-        continue-on-error: true
+      - name: Check Rust workspace
         run: |
-          git ls-remote https://github.com/anefzaoui/misterdownloadmanager.git refs/tags/v0.5.2
-
-      - name: Check formatting and Clippy
-        run: |
-          cargo check --workspace --target ${{ matrix.target }}
+          cargo check --workspace --locked --target ${{ matrix.target }}
 
       - name: Run Rust Workspace Unit & Integration Tests
         run: |
-          cargo test --workspace --target ${{ matrix.target }}
+          cargo test --workspace --locked --target ${{ matrix.target }}
 
       - name: Build Release Binaries (rustcatch, rustcatch-cli, rustcatch-mcp, rustcatch-nmhost)
         run: |
-          cargo build --release --workspace --target ${{ matrix.target }}
+          cargo build --release --workspace --locked --target ${{ matrix.target }}
 
       - name: Package Browser Extension & Binaries Artifact
         uses: actions/upload-artifact@v4
